@@ -42,6 +42,7 @@
         .login-card p {
             color: #555;
             font-size: 14px;
+            line-height: 1.5;
         }
 
         .login-card input {
@@ -78,6 +79,16 @@
             margin: 15px 0;
             color: #777;
             font-size: 13px;
+        }
+
+        .privacy-note {
+            margin-top: 12px;
+            background: #f3f7f5;
+            border-left: 4px solid #25d366;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #444;
         }
 
         .chat-app {
@@ -159,6 +170,14 @@
             cursor: pointer;
         }
 
+        .mobile-room-info {
+            display: none;
+            background: white;
+            padding: 10px 15px;
+            border-bottom: 1px solid #ddd;
+            font-size: 13px;
+        }
+
         .messages {
             flex: 1;
             padding: 20px;
@@ -212,6 +231,7 @@
             font-size: 13px;
             color: #555;
             min-height: 20px;
+            background: #e5ddd5;
         }
 
         .message-form {
@@ -252,6 +272,10 @@
             .message {
                 max-width: 85%;
             }
+
+            .mobile-room-info {
+                display: block;
+            }
         }
     </style>
 </head>
@@ -271,6 +295,10 @@
 
         <input type="text" id="roomInput" placeholder="Enter room code">
         <button class="btn btn-join" onclick="joinRoom()">Join Private Room</button>
+
+        <div class="privacy-note">
+            No database. No message history. Once users logout, the chat disappears.
+        </div>
     </div>
 </div>
 
@@ -299,6 +327,11 @@
             </div>
 
             <button class="logout-btn" onclick="logoutChat()">Logout</button>
+        </div>
+
+        <div class="mobile-room-info">
+            Room Code: <strong id="mobileRoomLabel"></strong>
+            <button onclick="copyRoomCode()" style="float:right;">Copy</button>
         </div>
 
         <div class="messages" id="messages"></div>
@@ -367,14 +400,6 @@
                 console.log("Socket connection error, retrying:", error.message);
             });
 
-            socket.on("reconnect_attempt", function(attempt) {
-                console.log("Reconnect attempt:", attempt);
-            });
-
-            socket.on("reconnect", function(attempt) {
-                console.log("Reconnected after attempt:", attempt);
-            });
-
             socket.on("disconnect", function(reason) {
                 console.log("Socket disconnected:", reason);
             });
@@ -387,7 +412,7 @@
 
             if (socket && socket.connected) {
                 clearInterval(waitForConnection);
-                console.log("Socket ready, running callback:", socket.id);
+                console.log("Socket ready:", socket.id);
                 callback();
                 return;
             }
@@ -410,12 +435,40 @@
 
         currentUsername = username;
 
-        connectSocket(function() {
-            console.log("Sending create_private_room event for:", currentUsername);
-
-            socket.emit("create_private_room", {
+        fetch("/api/create-room", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
                 username: currentUsername
+            })
+        })
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            if (!data.ok) {
+                alert(data.message || "Could not create room.");
+                return;
+            }
+
+            currentRoom = data.room;
+
+            console.log("Room created using HTTP:", currentRoom);
+
+            connectSocket(function() {
+                console.log("Joining newly created room:", currentRoom);
+
+                socket.emit("join_private_room", {
+                    username: currentUsername,
+                    room: currentRoom
+                });
             });
+        })
+        .catch(function(error) {
+            console.log("Create room HTTP error:", error);
+            alert("Could not create room. Please refresh and try again.");
         });
     }
 
@@ -435,7 +488,7 @@
         currentRoom = room;
 
         connectSocket(function() {
-            console.log("Sending join_private_room event for:", currentRoom);
+            console.log("Joining private room:", currentRoom);
 
             socket.emit("join_private_room", {
                 username: currentUsername,
@@ -471,7 +524,7 @@
             setText("mobileRoomLabel", currentRoom);
             setText("chatTitle", "Private Room: " + currentRoom);
 
-            console.log("Room UI updated successfully:", currentRoom);
+            console.log("Room UI updated:", currentRoom);
         });
 
         socket.on("receive_message", function(data) {
@@ -647,7 +700,7 @@
         return div.innerHTML;
     }
 
-    // Disable old PWA service worker during testing so Render does not load old JavaScript.
+    // During testing, remove old PWA service worker so Render does not load old JavaScript.
     if ("serviceWorker" in navigator) {
         navigator.serviceWorker.getRegistrations().then(function(registrations) {
             registrations.forEach(function(registration) {
@@ -657,5 +710,6 @@
         });
     }
 </script>
+
 </body>
 </html>
