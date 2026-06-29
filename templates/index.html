@@ -315,15 +315,37 @@
 
 <script>
     let socket = null;
+    let socketEventsReady = false;
     let currentUsername = "";
     let currentRoom = "";
     let typingTimer = null;
 
-    function connectSocket() {
+    function connectSocket(callback) {
+        if (socket && socket.connected) {
+            callback();
+            return;
+        }
+
         if (!socket) {
-            socket = io();
+            socket = io(window.location.origin, {
+                transports: ["polling", "websocket"],
+                reconnection: true,
+                reconnectionAttempts: 5,
+                timeout: 15000
+            });
+
             setupSocketEvents();
         }
+
+        socket.once("connect", function() {
+            console.log("Socket connected:", socket.id);
+            callback();
+        });
+
+        socket.once("connect_error", function(error) {
+            console.log("Socket connection error:", error);
+            alert("Chat server connection failed. Please refresh and try again.");
+        });
     }
 
     function createRoom() {
@@ -336,10 +358,12 @@
 
         currentUsername = username;
 
-        connectSocket();
+        connectSocket(function() {
+            console.log("Creating private room for:", currentUsername);
 
-        socket.emit("create_private_room", {
-            username: currentUsername
+            socket.emit("create_private_room", {
+                username: currentUsername
+            });
         });
     }
 
@@ -355,21 +379,33 @@
         currentUsername = username;
         currentRoom = room;
 
-        connectSocket();
+        connectSocket(function() {
+            console.log("Joining private room:", currentRoom);
 
-        socket.emit("join_private_room", {
-            username: currentUsername,
-            room: currentRoom
+            socket.emit("join_private_room", {
+                username: currentUsername,
+                room: currentRoom
+            });
         });
     }
 
     function setupSocketEvents() {
+        if (socketEventsReady) {
+            return;
+        }
+
+        socketEventsReady = true;
+
         socket.on("room_joined", function(data) {
+            console.log("Room joined:", data);
+
             currentRoom = data.room;
 
             document.getElementById("loginScreen").style.display = "none";
             document.getElementById("chatApp").style.display = "block";
+
             document.getElementById("roomLabel").innerText = currentRoom;
+            document.getElementById("mobileRoomLabel").innerText = currentRoom;
             document.getElementById("chatTitle").innerText = "Private Room: " + currentRoom;
         });
 
@@ -397,6 +433,7 @@
             typing.innerText = data.username + " is typing...";
 
             clearTimeout(typingTimer);
+
             typingTimer = setTimeout(function() {
                 typing.innerText = "";
             }, 1200);
@@ -404,6 +441,10 @@
 
         socket.on("error_message", function(data) {
             alert(data.message);
+        });
+
+        socket.on("disconnect", function(reason) {
+            console.log("Socket disconnected:", reason);
         });
     }
 
@@ -413,7 +454,7 @@
         const input = document.getElementById("messageInput");
         const message = input.value.trim();
 
-        if (!message || !socket) {
+        if (!message || !socket || !socket.connected) {
             return;
         }
 
@@ -425,7 +466,7 @@
     }
 
     document.addEventListener("input", function(event) {
-        if (event.target.id === "messageInput" && socket) {
+        if (event.target.id === "messageInput" && socket && socket.connected) {
             socket.emit("typing");
         }
     });
@@ -468,19 +509,29 @@
             return;
         }
 
-        navigator.clipboard.writeText(currentRoom);
-        alert("Room code copied: " + currentRoom);
+        navigator.clipboard.writeText(currentRoom)
+            .then(function() {
+                alert("Room code copied: " + currentRoom);
+            })
+            .catch(function() {
+                alert("Room code: " + currentRoom);
+            });
     }
 
     function logoutChat() {
-        if (socket) {
+        if (socket && socket.connected) {
             socket.emit("logout_chat");
             socket.disconnect();
         }
 
+        clearAppState();
+    }
+
+    function clearAppState() {
         currentUsername = "";
         currentRoom = "";
         socket = null;
+        socketEventsReady = false;
 
         document.getElementById("messages").innerHTML = "";
         document.getElementById("onlineUsers").innerHTML = "";
@@ -489,6 +540,7 @@
         document.getElementById("roomInput").value = "";
         document.getElementById("messageInput").value = "";
         document.getElementById("roomLabel").innerText = "";
+        document.getElementById("mobileRoomLabel").innerText = "";
 
         document.getElementById("chatApp").style.display = "none";
         document.getElementById("loginScreen").style.display = "flex";
@@ -499,7 +551,18 @@
         div.innerText = text;
         return div.innerHTML;
     }
-</script>
 
+    if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function() {
+            navigator.serviceWorker.register("/sw.js")
+                .then(function() {
+                    console.log("Service Worker registered");
+                })
+                .catch(function(error) {
+                    console.log("Service Worker failed:", error);
+                });
+        });
+    }
+</script>
 </body>
 </html>
