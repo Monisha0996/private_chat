@@ -320,8 +320,30 @@
     let currentRoom = "";
     let typingTimer = null;
 
+    function setText(id, value) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.innerText = value;
+        }
+    }
+
+    function setValue(id, value) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.value = value;
+        }
+    }
+
+    function clearHtml(id) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.innerHTML = "";
+        }
+    }
+
     function connectSocket(callback) {
         if (socket && socket.connected) {
+            console.log("Socket already connected:", socket.id);
             callback();
             return;
         }
@@ -349,7 +371,8 @@
     }
 
     function createRoom() {
-        const username = document.getElementById("usernameInput").value.trim();
+        const usernameInput = document.getElementById("usernameInput");
+        const username = usernameInput ? usernameInput.value.trim() : "";
 
         if (!username) {
             alert("Please enter your name.");
@@ -359,7 +382,7 @@
         currentUsername = username;
 
         connectSocket(function() {
-            console.log("Creating private room for:", currentUsername);
+            console.log("Sending create_private_room event for:", currentUsername);
 
             socket.emit("create_private_room", {
                 username: currentUsername
@@ -368,8 +391,11 @@
     }
 
     function joinRoom() {
-        const username = document.getElementById("usernameInput").value.trim();
-        const room = document.getElementById("roomInput").value.trim().toUpperCase();
+        const usernameInput = document.getElementById("usernameInput");
+        const roomInput = document.getElementById("roomInput");
+
+        const username = usernameInput ? usernameInput.value.trim() : "";
+        const room = roomInput ? roomInput.value.trim().toUpperCase() : "";
 
         if (!username || !room) {
             alert("Please enter your name and room code.");
@@ -380,7 +406,7 @@
         currentRoom = room;
 
         connectSocket(function() {
-            console.log("Joining private room:", currentRoom);
+            console.log("Sending join_private_room event for:", currentRoom);
 
             socket.emit("join_private_room", {
                 username: currentUsername,
@@ -397,16 +423,26 @@
         socketEventsReady = true;
 
         socket.on("room_joined", function(data) {
-            console.log("Room joined:", data);
+            console.log("Room joined event received:", data);
 
             currentRoom = data.room;
 
-            document.getElementById("loginScreen").style.display = "none";
-            document.getElementById("chatApp").style.display = "block";
+            const loginScreen = document.getElementById("loginScreen");
+            const chatApp = document.getElementById("chatApp");
 
-            document.getElementById("roomLabel").innerText = currentRoom;
-            document.getElementById("mobileRoomLabel").innerText = currentRoom;
-            document.getElementById("chatTitle").innerText = "Private Room: " + currentRoom;
+            if (loginScreen) {
+                loginScreen.style.display = "none";
+            }
+
+            if (chatApp) {
+                chatApp.style.display = "block";
+            }
+
+            setText("roomLabel", currentRoom);
+            setText("mobileRoomLabel", currentRoom);
+            setText("chatTitle", "Private Room: " + currentRoom);
+
+            console.log("Room UI updated successfully:", currentRoom);
         });
 
         socket.on("receive_message", function(data) {
@@ -419,6 +455,11 @@
 
         socket.on("online_users", function(data) {
             const list = document.getElementById("onlineUsers");
+
+            if (!list) {
+                return;
+            }
+
             list.innerHTML = "";
 
             data.users.forEach(function(user) {
@@ -430,6 +471,11 @@
 
         socket.on("typing_status", function(data) {
             const typing = document.getElementById("typingStatus");
+
+            if (!typing) {
+                return;
+            }
+
             typing.innerText = data.username + " is typing...";
 
             clearTimeout(typingTimer);
@@ -440,6 +486,7 @@
         });
 
         socket.on("error_message", function(data) {
+            console.log("Server error:", data);
             alert(data.message);
         });
 
@@ -452,7 +499,7 @@
         event.preventDefault();
 
         const input = document.getElementById("messageInput");
-        const message = input.value.trim();
+        const message = input ? input.value.trim() : "";
 
         if (!message || !socket || !socket.connected) {
             return;
@@ -473,6 +520,10 @@
 
     function addMessage(username, message, time) {
         const messages = document.getElementById("messages");
+
+        if (!messages) {
+            return;
+        }
 
         const div = document.createElement("div");
         div.classList.add("message");
@@ -495,6 +546,10 @@
 
     function addSystemMessage(message, time) {
         const messages = document.getElementById("messages");
+
+        if (!messages) {
+            return;
+        }
 
         const div = document.createElement("div");
         div.classList.add("system");
@@ -533,17 +588,27 @@
         socket = null;
         socketEventsReady = false;
 
-        document.getElementById("messages").innerHTML = "";
-        document.getElementById("onlineUsers").innerHTML = "";
-        document.getElementById("typingStatus").innerText = "";
-        document.getElementById("usernameInput").value = "";
-        document.getElementById("roomInput").value = "";
-        document.getElementById("messageInput").value = "";
-        document.getElementById("roomLabel").innerText = "";
-        document.getElementById("mobileRoomLabel").innerText = "";
+        clearHtml("messages");
+        clearHtml("onlineUsers");
 
-        document.getElementById("chatApp").style.display = "none";
-        document.getElementById("loginScreen").style.display = "flex";
+        setText("typingStatus", "");
+        setText("roomLabel", "");
+        setText("mobileRoomLabel", "");
+
+        setValue("usernameInput", "");
+        setValue("roomInput", "");
+        setValue("messageInput", "");
+
+        const chatApp = document.getElementById("chatApp");
+        const loginScreen = document.getElementById("loginScreen");
+
+        if (chatApp) {
+            chatApp.style.display = "none";
+        }
+
+        if (loginScreen) {
+            loginScreen.style.display = "flex";
+        }
     }
 
     function escapeHtml(text) {
