@@ -350,24 +350,53 @@
 
         if (!socket) {
             socket = io(window.location.origin, {
-                transports: ["polling", "websocket"],
+                transports: ["polling"],
                 reconnection: true,
-                reconnectionAttempts: 5,
-                timeout: 15000
+                reconnectionAttempts: 10,
+                reconnectionDelay: 1000,
+                timeout: 30000
             });
 
             setupSocketEvents();
+
+            socket.on("connect", function() {
+                console.log("Socket connected:", socket.id);
+            });
+
+            socket.on("connect_error", function(error) {
+                console.log("Socket connection error, retrying:", error.message);
+            });
+
+            socket.on("reconnect_attempt", function(attempt) {
+                console.log("Reconnect attempt:", attempt);
+            });
+
+            socket.on("reconnect", function(attempt) {
+                console.log("Reconnected after attempt:", attempt);
+            });
+
+            socket.on("disconnect", function(reason) {
+                console.log("Socket disconnected:", reason);
+            });
         }
 
-        socket.once("connect", function() {
-            console.log("Socket connected:", socket.id);
-            callback();
-        });
+        let waited = 0;
 
-        socket.once("connect_error", function(error) {
-            console.log("Socket connection error:", error);
-            alert("Chat server connection failed. Please refresh and try again.");
-        });
+        const waitForConnection = setInterval(function() {
+            waited += 500;
+
+            if (socket && socket.connected) {
+                clearInterval(waitForConnection);
+                console.log("Socket ready, running callback:", socket.id);
+                callback();
+                return;
+            }
+
+            if (waited >= 30000) {
+                clearInterval(waitForConnection);
+                alert("Chat server is taking too long to connect. Please refresh and try again.");
+            }
+        }, 500);
     }
 
     function createRoom() {
@@ -489,10 +518,6 @@
             console.log("Server error:", data);
             alert(data.message);
         });
-
-        socket.on("disconnect", function(reason) {
-            console.log("Socket disconnected:", reason);
-        });
     }
 
     function sendMessage(event) {
@@ -585,6 +610,11 @@
     function clearAppState() {
         currentUsername = "";
         currentRoom = "";
+
+        if (socket) {
+            socket.removeAllListeners();
+        }
+
         socket = null;
         socketEventsReady = false;
 
@@ -617,15 +647,13 @@
         return div.innerHTML;
     }
 
+    // Disable old PWA service worker during testing so Render does not load old JavaScript.
     if ("serviceWorker" in navigator) {
-        window.addEventListener("load", function() {
-            navigator.serviceWorker.register("/sw.js")
-                .then(function() {
-                    console.log("Service Worker registered");
-                })
-                .catch(function(error) {
-                    console.log("Service Worker failed:", error);
-                });
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            registrations.forEach(function(registration) {
+                registration.unregister();
+                console.log("Old service worker unregistered");
+            });
         });
     }
 </script>
