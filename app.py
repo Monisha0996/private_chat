@@ -36,6 +36,8 @@ def index():
 
 @socketio.on("create_private_room")
 def create_private_room(data):
+    print("CREATE ROOM EVENT RECEIVED:", data, flush=True)
+
     username = clean_text(data.get("username"), 30)
 
     if not username:
@@ -51,6 +53,8 @@ def create_private_room(data):
         "users": set(),
         "created_by": request.sid
     }
+
+    print("ROOM CREATED:", room_code, flush=True)
 
     join_user_to_room(username, room_code, is_creator=True)
 
