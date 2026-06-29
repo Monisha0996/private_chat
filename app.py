@@ -49,6 +49,36 @@ def health():
         "online_users": len(online_users)
     })
 
+@app.route("/api/create-room", methods=["GET", "POST"])
+def api_create_room():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        username = clean_text(data.get("username"), 30)
+    else:
+        username = clean_text(request.args.get("username"), 30)
+
+    if not username:
+        return jsonify({
+            "ok": False,
+            "message": "Please enter your name."
+        }), 400
+
+    room_code = generate_room_code()
+
+    while room_code in rooms:
+        room_code = generate_room_code()
+
+    rooms[room_code] = {
+        "users": set(),
+        "created_by": None
+    }
+
+    print("ROOM CREATED BY HTTP:", room_code, flush=True)
+
+    return jsonify({
+        "ok": True,
+        "room": room_code
+    })
 
 # -------------------------------------------------------
 # IMPORTANT FIX FOR RENDER
